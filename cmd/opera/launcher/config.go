@@ -132,6 +132,17 @@ var (
 		Name:  "db.preset",
 		Usage: "DBs layout preset ('pbl-1' or 'ldb-1' or 'legacy-ldb' or 'legacy-pbl')",
 	}
+
+	CSVFileFlag = cli.StringFlag{
+		Name:  "gasusage",
+		Usage: "CSV file to export gas usage data by block",
+		Value: "blocks.csv",
+	}
+
+	GZipFlag = cli.BoolTFlag{
+		Name:  "gzip",
+		Usage: "FIXME: compress exported block gas usage. Default: false",
+	}
 )
 
 type GenesisTemplate struct {

@@ -2,6 +2,8 @@ package launcher
 
 import (
 	"compress/gzip"
+	"encoding/csv"
+	"fmt"
 	"io"
 	"os"
 	"strconv"
@@ -21,6 +23,7 @@ import (
 	"gopkg.in/urfave/cli.v1"
 
 	"github.com/Fantom-foundation/go-opera/gossip"
+	"github.com/Fantom-foundation/go-opera/inter"
 	"github.com/Fantom-foundation/go-opera/utils/dbutil/autocompact"
 )
 
@@ -151,5 +154,84 @@ func exportEvmKeys(ctx *cli.Context) error {
 		}
 	}
 	log.Info("Exported EVM keys", "dir", fn)
+	return nil
+}
+
+func exportGasBlocks(ctx *cli.Context) error {
+	cfg := makeAllConfigs(ctx)
+
+	rawDbs := makeDirectDBsProducer(cfg)
+	gdb := makeGossipStore(rawDbs, cfg)
+	defer gdb.Close()
+
+	fileName := ctx.String(CSVFileFlag.Name)
+
+	isGZip := ctx.Bool(GZipFlag.Name)
+	if isGZip {
+		fileName = fmt.Sprintf("%s.gzip", fileName)
+	}
+
+	log.Info("Exporting gas usage data into", "file", fileName, "gzip", isGZip)
+	const batchSize = 1_000_000
+	i := 0
+
+	// setup writer
+	var csvOutW io.Writer
+	csvOut, err := os.Create(fileName)
+	if err != nil {
+		panic(fmt.Sprintf("Unable to create file %s.", fileName))
+	}
+	defer csvOut.Close()
+
+	csvOutW = csvOut
+
+	// FIXME: gzip option - it seems it doesn't work
+	if isGZip {
+		zw := gzip.NewWriter(csvOut)
+		zw.Name = strings.Trim(fileName, ".gzip")
+		z, _ := gzip.NewWriterLevel(zw, gzip.BestCompression)
+		//defer zw.Close()
+		csvOutW = z
+	}
+
+	w := csv.NewWriter(csvOutW)
+
+	headers := []string{"epoch", "block", "atropos", "txs", "gasused"}
+	if err = w.Write(headers); err != nil {
+		panic(err)
+	}
+
+	buffered := 0
+	var latest uint64
+
+	gdb.ForEachBlock(func(index idx.Block, block *inter.Block) {
+		err = w.Write([]string{strconv.Itoa(int(block.Atropos.Epoch())),
+			strconv.Itoa(int(index)),
+			block.Atropos.String(),
+			strconv.Itoa(len(block.InternalTxs) + len(block.SkippedTxs) + len(block.Txs)),
+			strconv.Itoa(int(block.GasUsed))})
+		if err != nil {
+			panic(fmt.Sprintf("block %d: %v", index, err))
+		}
+
+		i++
+		buffered++
+		latest = uint64(index)
+
+		if i%batchSize == 0 {
+			w.Flush()
+			buffered = 0
+
+			log.Info("Exporting gas usage data into", "file", fileName, "block", index)
+		}
+	})
+
+	if buffered != 0 {
+		w.Flush()
+		log.Info("Exporting gas usage data into", "file", fileName, "block", latest)
+	}
+
+	log.Info("Exported gas usage data into", "file", fileName)
+
 	return nil
 }

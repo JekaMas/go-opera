@@ -118,6 +118,21 @@ EVM export mode is configured with --export.evm.mode.
 Requires a first argument of the DB directory to write to.
 `,
 			},
+			{
+				Name:      "gas",
+				Usage:     "Export gas usage by block",
+				ArgsUsage: "<csv_file>",
+				Action:    utils.MigrateFlags(exportGasBlocks),
+				Flags: []cli.Flag{
+					CSVFileFlag,
+					GZipFlag,
+				},
+				Description: `
+    opera export gas
+
+Requires a first argument of the file to export csv file.
+`,
+			},
 		},
 	}
 	checkCommand = cli.Command{
